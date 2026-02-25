@@ -6,6 +6,9 @@ from bs4 import BeautifulSoup
 from telegram import Bot
 from sklearn.linear_model import LogisticRegression
 import nltk
+import feedparser
+import spacy
+from transformers import pipeline
 from nltk.sentiment import SentimentIntensityAnalyzer
 import logging
 import yfinance as yf
@@ -31,15 +34,30 @@ NEWS_SITES = [
 
 def gather_news():
     news = []
+    # Scrape headlines from main sites
     for site in NEWS_SITES:
         try:
             resp = requests.get(site, timeout=10)
             soup = BeautifulSoup(resp.text, 'html.parser')
-            headlines = [h.get_text() for h in soup.find_all('h2')][:10]
+            headlines = [h.get_text() for h in soup.find_all('h2')][:20]
             news.extend(headlines)
             logging.info(f"Scraped {len(headlines)} headlines from {site}")
         except Exception as e:
             logging.error(f"Error scraping {site}: {e}")
+    # Scrape from RSS feeds
+    rss_feeds = [
+        'https://www.moneycontrol.com/rss/markets.xml',
+        'https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms',
+        'https://www.business-standard.com/rss/markets-1.xml'
+    ]
+    for feed_url in rss_feeds:
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:20]:
+                news.append(entry.title)
+            logging.info(f"Scraped {len(feed.entries[:20])} RSS entries from {feed_url}")
+        except Exception as e:
+            logging.error(f"Error scraping RSS {feed_url}: {e}")
     return news
 
 def fetch_market_result():
@@ -64,12 +82,30 @@ def fetch_market_result():
         return {'nifty': None, 'banknifty': None, 'sensex': None}
 
 def analyze_sentiment(news):
-    nltk.download('vader_lexicon', quiet=True)
-    sia = SentimentIntensityAnalyzer()
-    scores = [sia.polarity_scores(item)['compound'] for item in news]
+    # Advanced NLP: topic extraction, NER, transformer sentiment
+    nlp = spacy.load('en_core_web_sm')
+    sentiment_model = pipeline('sentiment-analysis')
+    topics = set()
+    entities = set()
+    scores = []
+    for item in news:
+        doc = nlp(item)
+        for ent in doc.ents:
+            entities.add(ent.text)
+        for token in doc:
+            if token.pos_ in ['NOUN', 'PROPN']:
+                topics.add(token.lemma_)
+        try:
+            result = sentiment_model(item)[0]
+            score = result['score'] if result['label'] == 'POSITIVE' else -result['score']
+            scores.append(score)
+        except Exception as e:
+            logging.error(f"Transformer sentiment error: {e}")
     avg_score = np.mean(scores) if scores else 0
     logging.info(f"Sentiment scores: {scores}")
-    return avg_score
+    logging.info(f"Topics: {list(topics)}")
+    logging.info(f"Entities: {list(entities)}")
+    return avg_score, list(topics), list(entities)
 
 def predict_market(sentiment_score):
     # Use models for Nifty, BankNifty, Sensex if trained, else threshold
@@ -128,7 +164,7 @@ def send_telegram_message(message):
 
 def main():
     news = gather_news()
-    sentiment_score = analyze_sentiment(news)
+    sentiment_score, topics, entities = analyze_sentiment(news)
     preds, probs = predict_market(sentiment_score)
     actual_result = fetch_market_result()
     now = datetime.now()
@@ -140,6 +176,8 @@ def main():
             f"BankNifty: {preds['banknifty']} (prob: {probs['banknifty']:.2f})\n"
             f"Sensex: {preds['sensex']} (prob: {probs['sensex']:.2f})\n"
             f"Sentiment Score: {sentiment_score:.2f}\n"
+            f"Topics: {', '.join(topics[:10])}\n"
+            f"Entities: {', '.join(entities[:10])}\n"
             f"Top News:\n" + '\n'.join(news[:5])
         )
         send_telegram_message(msg)
@@ -152,6 +190,8 @@ def main():
             f"BankNifty: {preds['banknifty']} (prob: {probs['banknifty']:.2f})\n"
             f"Sensex: {preds['sensex']} (prob: {probs['sensex']:.2f})\n"
             f"Sentiment Score: {sentiment_score:.2f}\n"
+            f"Topics: {', '.join(topics[:10])}\n"
+            f"Entities: {', '.join(entities[:10])}\n"
             f"Top News:\n" + '\n'.join(news[:5])
         )
         send_telegram_message(msg)
