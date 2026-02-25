@@ -1,0 +1,7 @@
+requests
+beautifulsoup4
+python-telegram-bot
+scikit-learn
+pandas
+numpy
+nltk
