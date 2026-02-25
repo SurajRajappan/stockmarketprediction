@@ -30,26 +30,6 @@ NEWS_SITES = [
 ]
 
 def gather_news():
-    def fetch_market_result():
-        # Fetch Nifty, BankNifty, and Sensex closing prices
-        try:
-            nifty = yf.Ticker("^NSEI")
-            banknifty = yf.Ticker("^NSEBANK")
-            sensex = yf.Ticker("^BSESN")
-            hist_nifty = nifty.history(period="1d")
-            hist_banknifty = banknifty.history(period="1d")
-            hist_sensex = sensex.history(period="1d")
-            close_nifty = hist_nifty['Close'].iloc[-1] if not hist_nifty.empty else None
-            close_banknifty = hist_banknifty['Close'].iloc[-1] if not hist_banknifty.empty else None
-            close_sensex = hist_sensex['Close'].iloc[-1] if not hist_sensex.empty else None
-            return {
-                'nifty': close_nifty,
-                'banknifty': close_banknifty,
-                'sensex': close_sensex
-            }
-        except Exception as e:
-            logging.error(f"Error fetching market result: {e}")
-            return {'nifty': None, 'banknifty': None, 'sensex': None}
     news = []
     for site in NEWS_SITES:
         try:
@@ -61,6 +41,27 @@ def gather_news():
         except Exception as e:
             logging.error(f"Error scraping {site}: {e}")
     return news
+
+def fetch_market_result():
+    # Fetch Nifty, BankNifty, and Sensex closing prices
+    try:
+        nifty = yf.Ticker("^NSEI")
+        banknifty = yf.Ticker("^NSEBANK")
+        sensex = yf.Ticker("^BSESN")
+        hist_nifty = nifty.history(period="1d")
+        hist_banknifty = banknifty.history(period="1d")
+        hist_sensex = sensex.history(period="1d")
+        close_nifty = hist_nifty['Close'].iloc[-1] if not hist_nifty.empty else None
+        close_banknifty = hist_banknifty['Close'].iloc[-1] if not hist_banknifty.empty else None
+        close_sensex = hist_sensex['Close'].iloc[-1] if not hist_sensex.empty else None
+        return {
+            'nifty': close_nifty,
+            'banknifty': close_banknifty,
+            'sensex': close_sensex
+        }
+    except Exception as e:
+        logging.error(f"Error fetching market result: {e}")
+        return {'nifty': None, 'banknifty': None, 'sensex': None}
 
 def analyze_sentiment(news):
     nltk.download('vader_lexicon', quiet=True)
